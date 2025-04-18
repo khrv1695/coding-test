@@ -1,56 +1,79 @@
 using Application.DTOs;
 using Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using MediatR;
+using Application.Commands;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Logging;
 
-namespace API.Controllers;
-
-[ApiController]
-[Route("api/v1/[controller]")]
-public class ProductController : ControllerBase
+namespace API.Controllers
 {
-    private readonly IProductService _productService;
-
-    public ProductController(IProductService productService)
+    [ApiController]
+    [Route("api/v1/[controller]")]
+    // [Authorize]
+    public class ProductController : ControllerBase
     {
-        _productService = productService;
-    }
+        private readonly IProductService _productService;
+        private readonly IMediator _mediator;
+        private readonly ILogger<ProductController> _logger;
 
-    [HttpGet("{id}")]
-    public async Task<IActionResult> GetProduct(Guid id)
-    {
-        var product = await _productService.GetProductAsync(id);
-        if (product == null)
+        [HttpGet("health")]
+        public IActionResult HealthCheck()
         {
-            return NotFound();
+            return Ok();
         }
-        return Ok(product);
-    }
 
-    [HttpGet]
-    public async Task<IActionResult> GetProducts()
-    {
-        var products = await _productService.GetProductsAsync();
-        return Ok(products);
-    }
+        public ProductController(IProductService productService, IMediator mediator, ILogger<ProductController> logger)
+        {
+            _productService = productService;
+            _mediator = mediator;
+            _logger = logger;
+        }
 
-    [HttpPost]
-    public async Task<IActionResult> CreateProduct([FromBody] CreateProductDto createProductDto)
-    {
-        var product = await _productService.CreateProductAsync(createProductDto);
-        return CreatedAtAction(nameof(GetProduct), new { id = product.Id }, product);
-    }
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetProduct(Guid id)
+        {
+            _logger.LogInformation("Getting product with id: {id}", id);
+            var product = await _productService.GetProductAsync(id);
+            if (product == null)
+            {
+                _logger.LogWarning("Product with id: {id} not found", id);
+                return NotFound();
+            }
+            return Ok(product);
+        }
 
-    [HttpPut]
-    public async Task<IActionResult> UpdateProduct([FromBody] UpdateProductDto updateProductDto)
-    {
-        await _productService.UpdateProductAsync(updateProductDto);
-        return NoContent();
-    }
+        [HttpGet]
+        public async Task<IActionResult> GetProducts()
+        {
+            _logger.LogInformation("Getting all products");
+            var products = await _productService.GetProductsAsync();
+            return Ok(products);
+        }
 
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> DeleteProduct(Guid id)
-    {
-        await _productService.DeleteProductAsync(id);
-        return NoContent();
+        [HttpPost]
+        public async Task<IActionResult> CreateProduct([FromBody] CreateProductDto createProductDto)
+        {
+            _logger.LogInformation("Creating product");
+            var command = new CreateProductCommand(createProductDto);
+            var product = await _mediator.Send(command);
+            return CreatedAtAction(nameof(GetProduct), new { id = product.Id }, product);
+        }
+
+        [HttpPut]
+        public async Task<IActionResult> UpdateProduct([FromBody] UpdateProductDto updateProductDto)
+        {
+            _logger.LogInformation("Updating product");
+            await _productService.UpdateProductAsync(updateProductDto);
+            return NoContent();
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteProduct(Guid id)
+        {
+            _logger.LogInformation("Deleting product with id: {id}", id);
+            await _productService.DeleteProductAsync(id);
+            return NoContent();
+        }
     }
 }
